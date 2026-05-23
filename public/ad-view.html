@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ad View - Verification</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f1a; color: #fff; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+    .container { background: #1a1a2e; border-radius: 20px; padding: 30px; max-width: 420px; width: 90%; text-align: center; border: 1px solid #2a2a4a; }
+    .timer-ring { width: 140px; height: 140px; margin: 20px auto; position: relative; }
+    .timer-ring svg { transform: rotate(-90deg); width: 140px; height: 140px; }
+    .timer-ring circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+    .timer-ring .bg { stroke: #2a2a4a; }
+    .timer-ring .progress { stroke: #00d4aa; stroke-dasharray: 377; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear; }
+    .timer-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 36px; font-weight: 700; color: #00d4aa; }
+    .status { padding: 14px; border-radius: 12px; margin: 16px 0; font-size: 14px; font-weight: 500; }
+    .status.loading { background: #1e2a4a; color: #6ba0ff; }
+    .status.success { background: #0a2e1a; color: #00d4aa; }
+    .status.failed { background: #2e0a0a; color: #ff4d4d; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; border: none; text-decoration: none; transition: all 0.3s; margin: 8px 4px; }
+    .btn-primary { background: #00d4aa; color: #0f0f1a; }
+    .btn-primary:hover { background: #00e6b8; transform: translateY(-2px); }
+    .btn-primary:disabled { background: #2a2a4a; color: #666; cursor: not-allowed; transform: none; }
+    .btn-secondary { background: #2a2a4a; color: #fff; }
+    .btn-secondary:hover { background: #3a3a5a; }
+    .btn-danger { background: #ff4d4d; color: #fff; }
+    .btn-danger:hover { background: #ff6666; }
+    .step { display: flex; gap: 8px; justify-content: center; margin-bottom: 20px; }
+    .step-dot { width: 10px; height: 10px; border-radius: 50%; background: #2a2a4a; }
+    .step-dot.active { background: #00d4aa; }
+    .step-dot.done { background: #00d4aa; }
+    .hidden { display: none; }
+    .ad-area { margin: 16px 0; padding: 16px; background: #0a0a1a; border-radius: 12px; border: 1px dashed #2a2a4a; }
+    .ad-area a { color: #6ba0ff; word-break: break-all; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    p { color: #888; font-size: 14px; margin-bottom: 12px; }
+    .warning { color: #ff4d4d; font-size: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="step">
+    <div class="step-dot active" id="step1"></div>
+    <div class="step-dot" id="step2"></div>
+    <div class="step-dot" id="step3"></div>
+  </div>
+
+  <h1>🎥 বিজ্ঞাপন ভেরিফিকেশন</h1>
+  <p id="subtitle">দয়া করে অপেক্ষা করুন...</p>
+
+  <div class="timer-ring">
+    <svg viewBox="0 0 140 140">
+      <circle class="bg" cx="70" cy="70" r="60"/>
+      <circle class="progress" id="progressRing" cx="70" cy="70" r="60"/>
+    </svg>
+    <div class="timer-text" id="timerDisplay">30</div>
+  </div>
+
+  <div class="status loading" id="statusMsg">⏳ লোড হচ্ছে, অপেক্ষা করুন...</div>
+
+  <div class="ad-area" id="adArea">
+    <p style="color:#fff;margin-bottom:8px;">🔗 নিচের বাটনে ক্লিক করে বিজ্ঞাপন খুলুন:</p>
+    <a href="https://omg10.com/4/11047692" target="_blank" id="adLink" style="font-size:16px;font-weight:600;">👉 বিজ্ঞাপন খুলুন</a>
+    <p style="color:#666;font-size:12px;margin-top:8px;">⚠️ ট্যাব বন্ধ করবেন না! টাইমার শেষ না হওয়া পর্যন্ত অপেক্ষা করুন!</p>
+  </div>
+
+  <button class="btn btn-primary" id="claimBtn" disabled onclick="claimReward()">
+    ⏳ অপেক্ষা করুন...
+  </button>
+
+  <div id="resultArea" class="hidden"></div>
+  <div class="warning" id="warningMsg"></div>
+</div>
+
+<script>
+const SERVER = window.location.origin;
+const params = new URLSearchParams(window.location.search);
+const USER_ID = params.get('uid');
+const CODE = params.get('code');
+const AD_LINK = params.get('ad') || 'https://omg10.com/4/11047692';
+const WAIT_SECONDS = parseInt(params.get('t') || '30');
+const BOT_USERNAME = params.get('bot') || 'kamaibdv2_bot';
+
+const CIRCUMFERENCE = 2 * Math.PI * 60;
+document.getElementById('progressRing').style.strokeDasharray = CIRCUMFERENCE;
+
+let timeLeft = WAIT_SECONDS;
+let heartbeatInterval = null;
+let isClaimed = false;
+let tabClosed = false;
+
+function updateTimer() {
+  const display = document.getElementById('timerDisplay');
+  const ring = document.getElementById('progressRing');
+  display.textContent = timeLeft;
+  const offset = CIRCUMFERENCE - (CIRCUMFERENCE * (timeLeft / WAIT_SECONDS));
+  ring.style.strokeDashoffset = offset;
+}
+
+function updateStep(step) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('step' + i);
+    el.className = 'step-dot';
+    if (i < step) el.classList.add('done');
+    else if (i === step) el.classList.add('active');
+  }
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function sendHeartbeat() {
+  if (tabClosed) return;
+  fetch(SERVER + '/ad-heartbeat/' + USER_ID + '/' + CODE, { method: 'POST' }).catch(() => {});
+}
+
+function sendTabClosed() {
+  navigator.sendBeacon(SERVER + '/ad-close/' + USER_ID + '/' + CODE);
+}
+
+window.addEventListener('beforeunload', function(e) {
+  tabClosed = true;
+  sendTabClosed();
+  if (!isClaimed) {
+    setStatus('❌ ট্যাব বন্ধ! ভেরিফিকেশন ব্যর্থ!', 'failed');
+    document.getElementById('subtitle').textContent = '⚠️ ফেক এটেম্পট ধরা পড়েছে!';
+    document.getElementById('claimBtn').disabled = true;
+    document.getElementById('claimBtn').textContent = '❌ ব্যর্থ';
+  }
+});
+
+document.getElementById('adLink').href = AD_LINK;
+
+heartbeatInterval = setInterval(sendHeartbeat, 5000);
+sendHeartbeat();
+
+const countdown = setInterval(() => {
+  timeLeft--;
+  updateTimer();
+
+  if (timeLeft <= 25) {
+    updateStep(2);
+    setStatus('📺 বিজ্ঞাপন দেখা হচ্ছে... (' + (WAIT_SECONDS - timeLeft) + 'সে)', 'loading');
+  }
+
+  if (timeLeft <= 0) {
+    clearInterval(countdown);
+    clearInterval(heartbeatInterval);
+    updateStep(3);
+
+    if (!tabClosed) {
+      setStatus('✅ বিজ্ঞাপন দেখা সম্পন্ন! ক্লেইম করুন এখন।', 'success');
+        document.getElementById('subtitle').textContent = 'রিওয়ার্ড ক্লেইম করতে প্রস্তুত!';
+        document.getElementById('claimBtn').disabled = false;
+        document.getElementById('claimBtn').innerHTML = '🎉 ক্লেইম +১০ কয়েন';
+
+        document.getElementById('warningMsg').textContent = '⚠️ ট্যাব খোলা রাখুন! ৫ সেকেন্ডের মধ্যে ক্লেইম করুন।';
+      setTimeout(() => {
+        if (!isClaimed && !tabClosed) {
+          setStatus('⏳ সময় শেষ! আবার শুরু করুন।', 'failed');
+          document.getElementById('claimBtn').disabled = true;
+          document.getElementById('claimBtn').textContent = '❌ মেয়াদ শেষ';
+        }
+      }, 10000);
+    }
+  }
+}, 1000);
+
+function claimReward() {
+  if (isClaimed || tabClosed) return;
+  isClaimed = true;
+  document.getElementById('claimBtn').disabled = true;
+  document.getElementById('claimBtn').textContent = '⏳ ভেরিফাই হচ্ছে...';
+
+  fetch(SERVER + '/ad-verify/' + USER_ID + '/' + CODE, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        const reward = data.reward || 10;
+        setStatus('🎉 +' + reward + ' কয়েন অর্জিত!' + (data.vip ? ' (২x VIP!)' : ''), 'success');
+        document.getElementById('subtitle').textContent = '✅ সফলভাবে ভেরিফাইড!';
+        document.getElementById('claimBtn').innerHTML = '✅ ক্লেইম করা হয়েছে!';
+        document.getElementById('claimBtn').className = 'btn btn-primary';
+        document.getElementById('claimBtn').disabled = true;
+        document.getElementById('warningMsg').textContent = '';
+        document.getElementById('adArea').innerHTML = '<p style="color:#00d4aa;font-size:18px;font-weight:600;">✅ সম্পন্ন! এখন টেলিগ্রামে ফিরে যান 👇</p><a href="https://t.me/' + BOT_USERNAME + '" target="_blank" class="btn btn-secondary" style="display:inline-flex;margin-top:12px;">📱 টেলিগ্রামে ফিরুন</a>';
+      } else {
+        setStatus('❌ ' + (data.reason || 'ভেরিফিকেশন ব্যর্থ'), 'failed');
+        document.getElementById('claimBtn').textContent = '❌ ব্যর্থ';
+      }
+    })
+    .catch(() => {
+      setStatus('❌ কানেকশন ত্রুটি! আবার চেষ্টা করুন।', 'failed');
+        document.getElementById('claimBtn').textContent = '❌ ত্রুটি';
+        isClaimed = false;
+        document.getElementById('claimBtn').disabled = false;
+        document.getElementById('claimBtn').innerHTML = '🎉 ক্লেইম +১০ কয়েন';
+    });
+}
+</script>
+</body>
+</html>
